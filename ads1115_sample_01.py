@@ -12,7 +12,7 @@ try:
 	print("Procedo a leer potenciometro en AN2. Ctrl + C para salir...")
 	print()
 	# Canal para leer
-	POTE_CH = 2
+	POTE_CH = 3
 
 	while(True):
 		# Leo el valor del canal AN2
