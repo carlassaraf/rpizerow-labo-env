@@ -5,6 +5,7 @@
 #include <linux/string.h>
 
 #include <asm/io.h>
+#include <asm/delay.h>
 
 // GPIO Base address (Physical)
 #define GPIO_BASE	0x20200000
@@ -12,17 +13,19 @@
 #define GPSET0_OFF	0x1c
 // GPIO Pin Output Clear 0
 #define GPCLR0_OFF	0x28
+// GPIO Pull-Up/Down
+#define GPPUD_OFF	0x94
 // Valor para funcion de output
-#define GPIO_FUNC_OUTPUT	1
+#define GPIO_FUNC_OUTPUT		1UL
 
 // Maxima cantidad de bytes que puede escribir el usuario
 #define MAX_BUFFER_SIZE	64
 
 // GPIOs
-#define LED_RED_GPIO	19
-#define LED_BLUE_GPIO	26
-#define LED_GREEN_GPIO	13
-#define BUZZER_GPIO		22
+#define LED_RED_GPIO	19UL
+#define LED_BLUE_GPIO	26UL
+#define LED_GREEN_GPIO	13UL
+#define BUZZER_GPIO		22UL
 
 // Puntero a archivo de dispositivo
 static struct proc_dir_entry *g_gpio_driver_proc_file = NULL;
@@ -35,11 +38,12 @@ static unsigned int *g_gpio_base = NULL;
  * @param user puntero a buffer de user
  * @param err_msg mensaje de error
 */
-static void print_err(char *user, char *err_msg) {
+static void print_err(char *user, const char *err_msg) {
 	// Variable local
-	char str[64];
+	char str[MAX_BUFFER_SIZE];
 	strcpy(str, err_msg);
-	copy_to_user(user, str, strlen(str));
+	// Falta implementacion de copiar a user
+
 	printk(KERN_ERR "%s", str);
 }
 
@@ -71,12 +75,10 @@ static void gpio_set_dir_output(unsigned int gpio) {
 static void gpio_off(unsigned int gpio) {
 	// Puntero a registro
 	unsigned int *gpio_clr;
-	// Configuro como salida
-	gpio_set_dir_output(gpio);
 	// Obtengo la direccion del registro de clear
 	gpio_clr = (unsigned int*) ((char*)g_gpio_base + GPCLR0_OFF);
 	// Apago el GPIO
-	*gpio_clr |= 1 << gpio;
+	*gpio_clr = 1UL << gpio;
 }
 
 /**
@@ -86,12 +88,10 @@ static void gpio_off(unsigned int gpio) {
 static void gpio_on(unsigned int gpio) {
 	// Puntero a registro
 	unsigned int *gpio_set;
-	// Configuro como salida
-	gpio_set_dir_output(gpio);
 	// Obtengo la direccion del registro de set
 	gpio_set = (unsigned int*) ((char*)g_gpio_base + GPSET0_OFF);
 	// Prendo el GPIO
-	*gpio_set |= 1 << gpio;
+	*gpio_set = 1UL << gpio;
 }
 
 /**
@@ -159,7 +159,7 @@ static ssize_t gpio_driver_write(struct file *f, const char __user *user, size_t
 	// Obtengo los valores por separado
 	if(sscanf(local_buff, "%s %s", gpio_name, gpio_value) != 2) {
 		// Salio mal
-		print_err(user, "gpio_driver: Formato incorrecto\n");
+		print_err((char*)user, "gpio_driver: Formato incorrecto\n");
 		return -1;
 	}
 
@@ -168,7 +168,7 @@ static ssize_t gpio_driver_write(struct file *f, const char __user *user, size_t
 	// Verifico el resultado
 	if(gpio_number < 0) {
 		// Salio mal
-		print_err(user, "gpio_driver: Nombre de GPIO invalido\n");
+		print_err((char*)user, "gpio_driver: Nombre de GPIO invalido\n");
 		return -1;
 	}
 
@@ -183,7 +183,7 @@ static ssize_t gpio_driver_write(struct file *f, const char __user *user, size_t
 	}
 	else {
 		// Salio mal
-		print_err(user, "gpio_driver: Valor de GPIO invalido\n");
+		print_err((char*)user, "gpio_driver: Valor de GPIO invalido\n");
 		return -1;
 	}
 
@@ -202,6 +202,9 @@ static struct proc_ops g_proc_ops = {
  * @return codigo de error
 */
 static int __init gpio_driver_init(void) {
+	// Numeros de GPIO a usar
+	unsigned int gpio_numbers[4] = { LED_RED_GPIO, LED_BLUE_GPIO, LED_GREEN_GPIO, BUZZER_GPIO };
+	int i;
 	// Intenta mapear la memoria virtual para el GPIO
 	g_gpio_base = (unsigned int*)ioremap(GPIO_BASE, PAGE_SIZE);
 	// Reviso si fue posible
@@ -222,6 +225,13 @@ static int __init gpio_driver_init(void) {
 
 	// Todo salio bien
 	printk(KERN_INFO "gpio_driver: GPIO driver inicializado con exito!\n");
+	// Inicializo GPIOs
+	for(i = 0; i < 4; i++) {
+		// Configuro como salida
+		gpio_set_dir_output(gpio_numbers[i]);
+		// Apago de entrada
+		gpio_off(gpio_numbers[i]);
+	}
 	return 0;
 }
 
